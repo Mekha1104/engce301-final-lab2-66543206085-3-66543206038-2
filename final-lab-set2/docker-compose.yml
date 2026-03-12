@@ -1,0 +1,116 @@
+services:
+
+  # ── Auth DB ────────────────────────────────────────────────────────
+  auth-db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB:       authdb
+      POSTGRES_USER:     admin
+      POSTGRES_PASSWORD: secret
+    volumes:
+      - auth_data:/var/lib/postgresql/data
+      - ./auth-service/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d authdb"]
+      interval: 10s
+      timeout:  5s
+      retries:  5
+    networks: [lab2-net]
+
+  # ── Task DB ────────────────────────────────────────────────────────
+  task-db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB:       taskdb
+      POSTGRES_USER:     admin
+      POSTGRES_PASSWORD: secret
+    volumes:
+      - task_data:/var/lib/postgresql/data
+      - ./task-service/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d taskdb"]
+      interval: 10s
+      timeout:  5s
+      retries:  5
+    networks: [lab2-net]
+
+  # ── User DB ────────────────────────────────────────────────────────
+  user-db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB:       userdb
+      POSTGRES_USER:     admin
+      POSTGRES_PASSWORD: secret
+    volumes:
+      - user_data:/var/lib/postgresql/data
+      - ./user-service/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d userdb"]
+      interval: 10s
+      timeout:  5s
+      retries:  5
+    networks: [lab2-net]
+
+  # ── Auth Service ───────────────────────────────────────────────────
+  auth-service:
+    build: ./auth-service
+    environment:
+      DB_HOST:       auth-db
+      DB_PORT:       5432
+      DB_NAME:       authdb
+      DB_USER:       admin
+      DB_PASSWORD:   secret
+      JWT_SECRET:    engce301-lab2-jwt-secret-2024
+      JWT_EXPIRES_IN: 1h
+      PORT:          3001
+    ports:
+      - "3001:3001"
+    depends_on:
+      auth-db: { condition: service_healthy }
+    networks: [lab2-net]
+    restart: unless-stopped
+
+  # ── Task Service ───────────────────────────────────────────────────
+  task-service:
+    build: ./task-service
+    environment:
+      DB_HOST:     task-db
+      DB_PORT:     5432
+      DB_NAME:     taskdb
+      DB_USER:     admin
+      DB_PASSWORD: secret
+      JWT_SECRET:  engce301-lab2-jwt-secret-2024
+      PORT:        3002
+    ports:
+      - "3002:3002"
+    depends_on:
+      task-db: { condition: service_healthy }
+    networks: [lab2-net]
+    restart: unless-stopped
+
+  # ── User Service ───────────────────────────────────────────────────
+  user-service:
+    build: ./user-service
+    environment:
+      DB_HOST:     user-db
+      DB_PORT:     5432
+      DB_NAME:     userdb
+      DB_USER:     admin
+      DB_PASSWORD: secret
+      JWT_SECRET:  engce301-lab2-jwt-secret-2024
+      PORT:        3003
+    ports:
+      - "3003:3003"
+    depends_on:
+      user-db: { condition: service_healthy }
+    networks: [lab2-net]
+    restart: unless-stopped
+
+volumes:
+  auth_data:
+  task_data:
+  user_data:
+
+networks:
+  lab2-net:
+    driver: bridge
