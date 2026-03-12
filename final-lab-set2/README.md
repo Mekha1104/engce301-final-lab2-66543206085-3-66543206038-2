@@ -1,132 +1,149 @@
-# 🚀 ENGCE301 Final Lab — Set 2: Microservices Scale-Up + Cloud Deploy (Railway)
-
-**ชื่อนักศึกษา:**
-- ปรเมษฐ สุริคำ — รหัส 66543206038-2
-- นายเมย์คาร์ สุวรรณวิสุทธิ์ — รหัส 66543206085-3
+# ENGCE301 Final Lab — Set 2
+## Microservices Scale-Up + Cloud Deploy (Railway)
 
 ---
 
-## 🌐 Railway Cloud URLs
+## 1. ข้อมูลนักศึกษา
+
+| ชื่อ-นามสกุล | รหัสนักศึกษา |
+|---|---|
+| นายปรเมษฐ สุริคำ | 66543206038-2 |
+| นายเมย์คาร์ สุวรรณวิสุทธิ์ | 66543206085-3 |
+
+---
+
+## 2. Railway Service URLs
 
 | Service | URL |
-|---------|-----|
-| Auth Service | `https://[AUTH_URL]` |
-| Task Service | `https://[TASK_URL]` |
-| User Service | `https://[USER_URL]` |
-
-> อัปเดต URL หลัง deploy บน Railway
+|---|---|
+| Auth Service | https://auth-service-production-5d4e.up.railway.app |
+| Task Service | https://task-service-production-431b.up.railway.app |
+| User Service | https://user-service-production-b4cf.up.railway.app |
 
 ---
 
-## 🏗️ Architecture Diagram (Cloud)
+## 3. Architecture Diagram (Cloud)
 
 ```
 Internet
     │
     ▼
-┌──────────────────────────────────────────────────────────────────────────┐
-│   🌐 Railway Cloud Platform                                              │
-│                                                                          │
-│  ┌───────────────────┐  ┌──────────────────────┐  ┌───────────────────┐  │
-│  │  🔑 Auth Service  │  │  📋 Task Service      │  │  👤 User Service  │  │
-│  │  auth.up.rlwy.net │  │  task.up.rlwy.net    │  │  user.up.rlwy.net │  │
-│  │  PORT: 3001       │  │  PORT: 3002          │  │  PORT: 3003       │  │
-│  └────────┬──────────┘  └──────────┬───────────┘  └────────┬──────────┘  │
-│           │                        │                       │             │
-│           ▼                        ▼                       ▼             │
-│  ┌────────────────┐   ┌─────────────────────┐  ┌──────────────────────┐  │
-│  │  🗄️ auth-db    │   │  🗄️ task-db          │  │  🗄️ user-db          │  │
-│  │  PostgreSQL    │   │  PostgreSQL         │  │  PostgreSQL          │  │
-│  │  users table   │   │  tasks table        │  │  user_profiles table │  │
-│  │  logs table    │   │  logs table         │  │  logs table          │  │
-│  └────────────────┘   └─────────────────────┘  └──────────────────────┘  │
-│                                                                          │
-│  JWT_SECRET ใช้ร่วมกันทุก service                                          │
-└──────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│   🌐 Railway Cloud Platform                                      │
+│                                                                  │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  │
+│  │  🔑 Auth Service │  │  📋 Task Service │  │  👤 User Service │  │
+│  │  PORT: 3001      │  │  PORT: 3002     │  │  PORT: 3003     │  │
+│  └────────┬─────────┘  └───────┬─────────┘  └────────┬────────┘  │
+│           │                    │                      │           │
+│           ▼                    ▼                      ▼           │
+│  ┌──────────────────┐  ┌──────────────────┐  ┌────────────────┐  │
+│  │  🗄️ auth-db      │  │  🗄️ task-db      │  │  🗄️ user-db    │  │
+│  │  users, logs     │  │  tasks, logs     │  │  profiles,logs │  │
+│  └──────────────────┘  └──────────────────┘  └────────────────┘  │
+│                                                                  │
+│   JWT_SECRET ใช้ร่วมกันทุก service (Railway Environment Variables) │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
+### Services
+- **Auth Service** — จัดการ register/login ออก JWT token
+- **Task Service** — CRUD tasks โดยใช้ JWT ยืนยันตัวตน
+- **User Service** — จัดการ user profiles โดยใช้ JWT ยืนยันตัวตน
+
+### Databases (Database-per-Service Pattern)
+
+| Database | Tables | Service |
+|---|---|---|
+| auth-db | users, logs | Auth Service |
+| task-db | tasks, logs | Task Service |
+| user-db | user_profiles, logs | User Service |
+
+> เนื่องจากแต่ละ service มี DB ของตัวเอง จึงไม่มี Foreign Key ข้าม Database แต่ใช้ `user_id` เป็น conceptual reference แทน
+
 ---
 
-## 🔀 Gateway Strategy
+## 4. Gateway Strategy
 
-เลือก **Option A: Frontend เรียก URL ของแต่ละ service โดยตรง**
+### Option A — Frontend เรียก URL ของแต่ละ Service โดยตรง
 
-**เหตุผล:** เป็นวิธีที่ง่ายและตรงไปตรงมาที่สุดสำหรับ scope ของ lab นี้ โดย Frontend รู้ URL ของแต่ละ service และเรียกตรงได้เลย ทุก service ใช้ JWT_SECRET เดียวกัน ทำให้ token จาก Auth Service ใช้กับ Task และ User Service ได้ทันที
+เลือก **Option A** เนื่องจาก:
+- ง่ายที่สุด ไม่ต้องตั้งค่า Nginx หรือ config เพิ่มเติม
+- เหมาะกับ environment การทดสอบและ academic project
+- ลดความซับซ้อนในการ deploy บน Railway
+- แต่ละ service มี Public URL ของตัวเองอยู่แล้ว
+
+### ข้อกำหนดที่ปฏิบัติตาม
+- `JWT_SECRET` เหมือนกันทุก service
+- Task Service ปฏิเสธ request ที่ไม่มี JWT → **401**
+- User Service ปฏิเสธ request ที่ไม่มี JWT → **401**
+- Auth Service ทำงานได้โดยไม่ต้องมี JWT (login/register)
 
 ---
 
-## 🚀 วิธีรัน (Local)
+## 5. วิธีทดสอบ (curl commands)
 
+### Register (T2)
 ```bash
-git clone <repo-url>
-cd engce301-final-lab2-...
-docker compose up --build
+curl -X POST https://auth-service-production-5d4e.up.railway.app/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"username":"testuser2","password":"pass123","email":"test2@test.com"}'
 ```
 
-Services จะรันที่:
-- Auth Service: http://localhost:3001
-- Task Service: http://localhost:3002
-- User Service: http://localhost:3003
-
----
-
-## 📋 API Endpoints
-
-### Auth Service
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| POST | /api/auth/register | ❌ | สมัครสมาชิก |
-| POST | /api/auth/login | ❌ | Login รับ JWT |
-| GET | /api/auth/verify | ❌ | ตรวจสอบ JWT |
-
-### Task Service
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | /api/tasks | ✅ JWT | ดึง tasks |
-| POST | /api/tasks | ✅ JWT | สร้าง task |
-| PUT | /api/tasks/:id | ✅ JWT | แก้ไข task |
-| DELETE | /api/tasks/:id | ✅ JWT | ลบ task |
-
-### User Service
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | /api/users/profile | ✅ JWT | ดู profile |
-| PUT | /api/users/profile | ✅ JWT | แก้ไข profile |
-| GET | /api/users/all | ✅ JWT | ดู users ทั้งหมด |
-| DELETE | /api/users/:id | ✅ JWT | ลบ user |
-
----
-
-## 🧪 Test Commands (Cloud)
-
+### Login (T3) — เก็บ token
 ```bash
-AUTH_URL="https://[AUTH_URL]"
-TASK_URL="https://[TASK_URL]"
-USER_URL="https://[USER_URL]"
-
-# Register
-curl -X POST $AUTH_URL/api/auth/register \
+TOKEN=$(curl -s -X POST https://auth-service-production-5d4e.up.railway.app/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"testuser","email":"test@test.com","password":"pass123"}'
+  -d '{"username":"testuser2","password":"pass123"}' | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+```
 
-# Login
-TOKEN=$(curl -s -X POST $AUTH_URL/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"testuser","password":"pass123"}' | \
-  grep -o '"token":"[^"]*"' | cut -d'"' -f4)
-
-# Create Task
-curl -X POST $TASK_URL/api/tasks \
+### Create Task (T4)
+```bash
+curl -X POST https://task-service-production-431b.up.railway.app/api/tasks \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"title":"My first cloud task"}'
-
-# Get Tasks
-curl $TASK_URL/api/tasks -H "Authorization: Bearer $TOKEN"
-
-# Get Profile
-curl $USER_URL/api/users/profile -H "Authorization: Bearer $TOKEN"
-
-# Test 401
-curl $TASK_URL/api/tasks
 ```
+
+### Get Tasks (T5)
+```bash
+curl https://task-service-production-431b.up.railway.app/api/tasks \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### Get Profile (T6)
+```bash
+curl https://user-service-production-b4cf.up.railway.app/api/users/profile \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### Update Profile (T7)
+```bash
+curl -X PUT https://user-service-production-b4cf.up.railway.app/api/users/profile \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"display_name":"Test User","bio":"Hello from Railway!"}'
+```
+
+### Test 401 — ไม่มี JWT (T8)
+```bash
+curl https://task-service-production-431b.up.railway.app/api/tasks
+# Expected: {"error":"Unauthorized: No token provided"}
+```
+
+---
+
+## 6. ผลการทดสอบ
+
+| Test | รายการ | ผล |
+|---|---|---|
+| T1 | Railway Dashboard — 3 services + 3 databases Active | ✅ ผ่าน |
+| T2 | POST /register บน Railway Auth URL → 201 + user object | ✅ ผ่าน |
+| T3 | POST /login บน Railway Auth URL → JWT token | ✅ ผ่าน |
+| T4 | POST /tasks บน Railway Task URL (มี JWT) → 201 Created | ✅ ผ่าน |
+| T5 | GET /tasks บน Railway Task URL (มี JWT) → tasks list | ✅ ผ่าน |
+| T6 | GET /users/profile บน Railway User URL (มี JWT) | ✅ ผ่าน |
+| T7 | PUT /users/profile บน Railway → อัปเดตสำเร็จ | ✅ ผ่าน |
+| T8 | GET /tasks โดยไม่มี JWT → 401 | ✅ ผ่าน |
+| T9 | Railway env page แสดง JWT_SECRET เหมือนกันทุก service | ✅ ผ่าน |
+| T10 | README อธิบาย Gateway Strategy + Architecture Cloud | ✅ ผ่าน |
